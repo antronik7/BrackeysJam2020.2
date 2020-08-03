@@ -26,11 +26,15 @@ public class PlayerController : MonoBehaviour
     [SerializeField]
     float stickReleaseMinDistance = 0.25f;
     [SerializeField]
-    float hookForce = 1f;
-    [SerializeField]
     float chargeSpeed = 1f;
     [SerializeField]
     float maxCharge = 10f;
+    [SerializeField]
+    float windSpeed = 1f;
+    [SerializeField]
+    float windStickMinValue = 0.9f;
+    [SerializeField]
+    float windMinAngle = 45f;
 
     //Components
     Rigidbody2D myRbody;
@@ -59,14 +63,24 @@ public class PlayerController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        ManageInputs();
-
         Move();
 
         if (currentState == State.Charging)
         {
             ChargeThrow();
         }
+        else if (currentState == State.Throwing)
+        {
+            if (hook.IsHookMoving() == false)
+                SwitchState(State.Winding);
+        }
+        else if (currentState == State.Winding)
+        {
+            if (hook.IsWinding() == false)
+                SwitchState(State.Moving);
+        }
+
+        ManageInputs();
 
         previousBoatVelocity = myRbody.velocity;
     }
@@ -83,6 +97,7 @@ public class PlayerController : MonoBehaviour
         {
             case State.Moving:
                 ShowPivot(false);
+                hook.RemoveHook();
                 break;
             case State.Charging:
                 ShowPivot(true);
@@ -93,6 +108,9 @@ public class PlayerController : MonoBehaviour
                 Throw();
                 break;
             case State.Winding:
+                Debug.Log("widing");
+                ShowPivot(false);
+                hook.StartWinding();
                 break;
             default:
                 break;
@@ -105,18 +123,34 @@ public class PlayerController : MonoBehaviour
     {
         float rightStickMagnitude = new Vector3(Input.GetAxis("HorizontalRight"), Input.GetAxis("VerticalRight"), 0f).magnitude;
 
-        if (rightStickMagnitude >= stickChargingValue && rightStickPreviousMagnitude < stickChargingValue)
-            SwitchState(State.Charging);
-
-        if (rightStickMagnitude >= stickChargingValue)
-            RotatePivot();
+        if(currentState == State.Moving)
+        {
+            if (rightStickMagnitude >= stickChargingValue && rightStickPreviousMagnitude < stickChargingValue)
+                SwitchState(State.Charging);
+        }
 
         if (currentState == State.Charging)
         {
+            if (rightStickMagnitude >= stickChargingValue)
+                RotatePivot();
+
             if (rightStickPreviousMagnitude - rightStickMagnitude >= stickReleaseMinDistance)
                 SwitchState(State.Throwing);
             else if (rightStickMagnitude <= stickChargingValue)
                 SwitchState(State.Moving);
+        }
+
+        if (currentState == State.Winding)
+        {
+            Wind(0f);
+
+            if (rightStickPreviousMagnitude >= windStickMinValue && rightStickMagnitude >= windStickMinValue)
+            {
+                if (Vector2.SignedAngle(new Vector2 (rightStickHorizontalPreviousValue, rightStickVerticalPreviousValue), new Vector2 (Input.GetAxis("HorizontalRight"), Input.GetAxis("VerticalRight"))) >= windMinAngle)
+                {
+                    Wind(windSpeed);
+                }
+            }
         }
 
         rightStickHorizontalPreviousValue = Input.GetAxis("HorizontalRight");
@@ -157,6 +191,12 @@ public class PlayerController : MonoBehaviour
         hook.transform.rotation = Quaternion.FromToRotation(hook.transform.up, new Vector3 (rightStickHorizontalPreviousValue, rightStickVerticalPreviousValue, 0f)) * hook.transform.rotation;
         hook.SetValues(currentCharge, transform);
         hook.gameObject.SetActive(true);
+        hook.Launch();
+    }
+
+    void Wind(float speedValue)
+    {
+        hook.SetWindingSpeed(speedValue);
     }
 
     void Move()
@@ -169,7 +209,7 @@ public class PlayerController : MonoBehaviour
                 myRbody.velocity = Vector2.zero;
         }
 
-        if (currentState == State.Moving)
+        if (currentState == State.Moving || currentState == State.Charging)
         {
             myRbody.velocity += new Vector2(leftStickHorizontalPreviousValue, leftStickVerticalPreviousValue) * boatSpeed * Time.deltaTime;
             myRbody.velocity = Vector2.ClampMagnitude(myRbody.velocity, boatMaxSpeed);
