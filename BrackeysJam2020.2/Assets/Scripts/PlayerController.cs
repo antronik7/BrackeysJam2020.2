@@ -18,6 +18,10 @@ public class PlayerController : MonoBehaviour
     [SerializeField]
     float boatMaxSpeed = 10f;
     [SerializeField]
+    float boatSlowdownSpeed = 0.25f;
+    [SerializeField]
+    float boatMinVelocity = 0.25f;
+    [SerializeField]
     float stickChargingValue = 0.9f;
     [SerializeField]
     float stickReleaseMinDistance = 0.25f;
@@ -39,6 +43,7 @@ public class PlayerController : MonoBehaviour
     float leftStickHorizontalPreviousValue = 0f;
     float leftStickVerticalPreviousValue = 0f;
     float currentCharge = 0f;
+    Vector2 previousBoatVelocity;
 
     private void Awake()
     {
@@ -62,6 +67,14 @@ public class PlayerController : MonoBehaviour
         {
             ChargeThrow();
         }
+
+        previousBoatVelocity = myRbody.velocity;
+    }
+
+    void OnCollisionEnter2D(Collision2D collision)
+    {
+        Vector3 v = Vector3.Reflect(previousBoatVelocity, collision.contacts[0].normal);
+        myRbody.velocity = v;
     }
 
     void SwitchState(State newState)
@@ -142,15 +155,24 @@ public class PlayerController : MonoBehaviour
     {
         hook.transform.position = transform.position;
         hook.transform.rotation = Quaternion.FromToRotation(hook.transform.up, new Vector3 (rightStickHorizontalPreviousValue, rightStickVerticalPreviousValue, 0f)) * hook.transform.rotation;
-        hook.SetValues(currentCharge);
+        hook.SetValues(currentCharge, transform);
         hook.gameObject.SetActive(true);
     }
 
     void Move()
     {
-        if(currentState == State.Moving)
+        myRbody.velocity -= myRbody.velocity * boatSlowdownSpeed * Time.deltaTime;
+
+        if(leftStickHorizontalPreviousValue == 0f && leftStickVerticalPreviousValue == 0f)
         {
-            //myRbody.velocity =
+            if (myRbody.velocity.magnitude <= boatMinVelocity)
+                myRbody.velocity = Vector2.zero;
+        }
+
+        if (currentState == State.Moving)
+        {
+            myRbody.velocity += new Vector2(leftStickHorizontalPreviousValue, leftStickVerticalPreviousValue) * boatSpeed * Time.deltaTime;
+            myRbody.velocity = Vector2.ClampMagnitude(myRbody.velocity, boatMaxSpeed);
         }
     }
 }
